@@ -18,5 +18,5 @@ COPY ./notion_docs_sync/ ./notion_docs_sync/
 
 RUN if [ "$APP_ENVIRONMENT" = "production" ]; then poetry install --nodev; else poetry install; fi
 
-ENTRYPOINT [ "/bin/bash", "poetry", "run", "notion-docs-sync"]
+ENTRYPOINT [ "poetry", "run", "notion-docs-sync"]
 CMD []
