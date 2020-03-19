@@ -5,15 +5,18 @@ description: 'Synchronize Documentation from GitHub to Notion'
 inputs:
   docs_path:
     description: The path to publish.
+    default: ./docs/
     required: true
   notion_url:
     description: The Notion URL to publish to.
     required: true
   notion_token:
+    required: true
     description: The Notion Access Token to publish with.
 runs:
   using: 'docker'
   image: 'Dockerfile'
   args:
+    - --notion-token=${{ inputs.notion_token }}
     - ${{ inputs.docs_path }}
     - ${{ inputs.notion_url }}
