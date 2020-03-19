@@ -1,4 +1,4 @@
-import sys
+import logging
 import os
 from random import choice
 from argparse import ArgumentParser
@@ -15,6 +15,9 @@ try:
     load_dotenv()
 except:
     pass
+
+
+logger = logging.getLogger(__name__)
 
 
 def random_emoji():
@@ -60,6 +63,8 @@ def infer_block(root_block, path) -> Block:
 
 
 def sync_file_to_block(filename, block):
+    logger.info(f"Syncing {filename} to block {block.id}")
+
     with open(filename) as markdown_fd:
         contents = markdown_fd.read()
 
@@ -72,6 +77,8 @@ def sync_file_to_block(filename, block):
 
     # TODO: Don't remove blocks that match?
     # Remove non-page blocks.
+
+    logger.info(f"Removing Children of {block.id}")
     for c in block.children:
         if c.type != 'page':
             c.remove()

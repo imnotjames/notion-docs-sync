@@ -1,3 +1,4 @@
+import logging
 import random
 import re
 import collections
@@ -7,6 +8,10 @@ from notion.block import CodeBlock, DividerBlock, HeaderBlock, SubheaderBlock, \
 import mistletoe
 from mistletoe.base_renderer import BaseRenderer
 from mistletoe.span_token import Image, Link
+
+
+logger = logging.getLogger(__name__)
+
 
 def flatten(l):
     for el in l:
@@ -158,7 +163,7 @@ class NotionRenderer(BaseRenderer):
         if token.language != "":
             matchLang = next((lang for lang in notionSoLangs if re.match(re.escape(token.language), lang, re.I)), "")
             if not matchLang:
-                print(f"Code block language {token.language} has no corresponding syntax in Notion.so")
+                logger.info(f"Code block language {token.language} has no corresponding syntax in Notion.so")
         else:
             matchLang = "Plain Text"
 
@@ -177,7 +182,7 @@ class NotionRenderer(BaseRenderer):
     def render_heading(self, token):
         level = token.level
         if level > 3:
-            print(f"h{level} not supported in Notion.so, converting to h3")
+            logger.info(f"h{level} not supported in Notion.so, converting to h3")
             level = 3
 
         def blockFunc(blockStr):
@@ -268,7 +273,7 @@ class NotionRenderer(BaseRenderer):
         #Render straight down to a string, cells aren't a concept in Notion
         strs, blocks = self.renderMultipleToString(token.children)
         if blocks:
-            print("Table cell contained non-strings (maybe an image?) and could not add...")
+            logger.info("Table cell contained non-strings (maybe an image?) and could not add...")
         return strs
 
     # == MD Span Tokens ==
