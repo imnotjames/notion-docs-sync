@@ -177,8 +177,8 @@ def sync_markdown_blocks_to_block(markdown_blocks, block):
             logger.info(f"Using existing markdown block {child_block.id} in {block.id}")
         except StopIteration:
             # If we've hit the end of the children create a new child.
-            logger.info(f"Creating new markdown block {child_block.id} in {block.id}")
             child_block = block.children.add_new(markdown_block_class, **markdown_block)
+            logger.info(f"Creating new markdown block {child_block.id} in {block.id}")
 
         touched_blocks.add(child_block.id)
 
@@ -186,7 +186,7 @@ def sync_markdown_blocks_to_block(markdown_blocks, block):
             sync_collection_rows(child_block, collection_schema, collection_rows)
 
         if block_children:
-            sync_markdown_blocks_to_block(markdown_blocks, child_block)
+            sync_markdown_blocks_to_block(block_children, child_block)
 
     for c in block.children:
         if c.type != 'page' and c.id not in touched_blocks:
