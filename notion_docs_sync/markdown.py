@@ -277,7 +277,7 @@ class NotionRenderer(BaseRenderer):
         return self.render_multiple_to_string_and_combine(token.children, lambda s: f"`{s}`")
 
     def render_raw_text(self, token):
-        return token.content
+        return token.content.replace("\n", " ")
 
     def render_strikethrough(self, token):
         return self.render_multiple_to_string_and_combine(token.children, lambda s: f"~{s}~")
