@@ -1,14 +1,11 @@
 import logging
-import random
 import re
 import collections
 from notion.block import CodeBlock, DividerBlock, HeaderBlock, SubheaderBlock, \
     SubsubheaderBlock, QuoteBlock, TextBlock, NumberedListBlock, \
     BulletedListBlock, ImageBlock, CollectionViewBlock
 import mistletoe
-import string
 from mistletoe.base_renderer import BaseRenderer
-from mistletoe.span_token import Image, Link
 
 
 logger = logging.getLogger(__name__)
@@ -231,22 +228,13 @@ class NotionRenderer(BaseRenderer):
         }
 
     def render_table(self, token):
-        header_row = self.render(token.header) #Header is a single row
-        rows = [self.render(r) for r in token.children] #don't use renderMultiple because it flattens
+        header_row = self.render(token.header)
+        rows = [self.render(r) for r in token.children]
 
-        def random_column_id():
-            return ''.join(random.choices(string.ascii_letters + string.digits, k=4))
+        schema = []
 
-        # The schema is basically special identifiers + the type of property to put into Notion.
-        schema = { random_column_id() : { 'name' : header_row[r], 'type': 'text' }for r in range(len(header_row) - 1) }
-
-        # However, The last one needs to be named 'Title' and is type title
-        schema.update({
-                'title' : {
-                    'name': header_row[-1],
-                    'type': 'title'
-                }
-            })
+        for row in header_row:
+            schema.append({"name": row, "type": "text"})
 
         return {
             'type': CollectionViewBlock,

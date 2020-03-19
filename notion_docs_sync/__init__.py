@@ -1,6 +1,7 @@
 import logging
 import os
 from random import choice
+from collections import OrderedDict
 from argparse import ArgumentParser
 
 from notion.client import NotionClient
@@ -94,6 +95,19 @@ def block_matches_markdown_block(block, markdown_block_type, **markdown_block):
     return True
 
 
+def sync_collection_schema(collection, expected_schema):
+    existing_schema = collection.get('schema')
+
+    # The schemas must match!
+    if existing_schema == expected_schema:
+        return
+
+    logger.info(f"Updating schema of {collection.id}")
+
+    # If they don't, try to make them match.
+    collection.set('schema', expected_schema)
+
+
 def sync_collection_rows(block, collection_schema, collection_rows):
     if block.collection is None:
         logger.info(f"Creating a new collection for {block.id}")
@@ -102,12 +116,17 @@ def sync_collection_rows(block, collection_schema, collection_rows):
         block.collection = client.get_collection(
             # Low-level use of the API
             # TODO: Update when notion-py provides a better interface for this
-            client.create_record("collection", parent=block, schema=collection_schema)
+            client.create_record("collection", parent=block, schema={"title": {"text": "_", "type": "text"}})
         )
 
         block.views.add_new(view_type="table")
 
-    # TODO: Compare collection schema and update the collection if it's not matching.
+    collection_schema_ids = ['title']
+
+    for i in range(len(collection_schema) - 1):
+        collection_schema_ids.append('x' + format(i, '0>4x'))
+
+    sync_collection_schema(block.collection, dict(zip(collection_schema_ids, collection_schema)))
 
     existing_rows = block.collection.get_rows()
 
@@ -122,12 +141,14 @@ def sync_collection_rows(block, collection_schema, collection_rows):
         except StopIteration:
             row_block = block.collection.add_row()
 
-        for idx, prop_name in enumerate(prop["name"] for prop in collection_schema.values()):
-            prop_name = prop_name.lower()  # The actual prop name in notion-py is lowercase
-            prop_val = row[idx]
+        if len(row) > len(collection_schema_ids):
+            row = row[:len(collection_schema_ids)]
 
-            if getattr(row_block, prop_name) != prop_val:
-                setattr(row_block, prop_name, prop_val)
+        row = zip(collection_schema_ids, row)
+
+        for schema_id, prop_value in row:
+            if row_block.get_property(schema_id) != prop_value:
+                row_block.set_property(schema_id, prop_value)
 
 
 def sync_markdown_blocks_to_block(markdown_blocks, block):
