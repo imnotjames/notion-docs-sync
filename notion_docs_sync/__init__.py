@@ -37,7 +37,6 @@ def random_emoji():
 
 
 def infer_block(root_block, path) -> Block:
-
     name, ext = os.path.splitext(path)
 
     if name == 'index':
@@ -62,25 +61,80 @@ def infer_block(root_block, path) -> Block:
     return root_block.children.add_new(PageBlock, title=title)
 
 
-def sync_file_to_block(filename, block):
-    logger.info(f"Syncing {filename} to block {block.id}")
+def move_pages_to_end(block):
+    # Move pages to the end of the document if they aren't already
+    pages_to_move = []
+    pages_seen = []
 
-    with open(filename) as markdown_fd:
-        contents = markdown_fd.read()
-
-    post = frontmatter.loads(contents)
-
-    markdown_blocks = convert(str(post))
-
-    # TODO: Don't remove blocks that match?
-    # Remove non-page blocks.
-
-    logger.info(f"Removing Children of {block.id}")
     for c in block.children:
-        if c.type != 'page':
-            c.remove()
+        if c.type == 'page':
+            pages_seen.append(c)
+        else:
+            pages_to_move.extend(pages_seen)
+            pages_seen.clear()
 
-    for markdown_block in reversed(markdown_blocks):
+    for page in pages_to_move:
+        logger.info(f"Moving page {page.id} to end of {block.id}")
+        page.move_to(block, 'last-child')
+
+
+def block_matches_markdown_block(block, markdown_block_type, **markdown_block):
+    if markdown_block_type != type(block):
+        return False
+
+    for key, value in markdown_block.items():
+        if key in ['type', 'schema', 'rows']:
+            continue
+
+        block_attr = getattr(block, key)
+
+        if block_attr != value:
+            return False
+
+    return True
+
+
+def sync_collection_rows(block, collection_schema, collection_rows):
+    if block.collection is None:
+        logger.info(f"Creating a new collection for {block.id}")
+        # We should have generated a schema and rows for this one
+        client = block._client  # Hacky internals stuff...
+        block.collection = client.get_collection(
+            # Low-level use of the API
+            # TODO: Update when notion-py provides a better interface for this
+            client.create_record("collection", parent=block, schema=collection_schema)
+        )
+
+        block.views.add_new(view_type="table")
+
+    # TODO: Compare collection schema and update the collection if it's not matching.
+
+    existing_rows = block.collection.get_rows()
+
+    for extra_row in existing_rows[len(collection_rows):]:
+        extra_row.remove()
+
+    existing_rows_iter = iter(existing_rows)
+
+    for row in collection_rows:
+        try:
+            row_block = next(existing_rows_iter)
+        except StopIteration:
+            row_block = block.collection.add_row()
+
+        for idx, prop_name in enumerate(prop["name"] for prop in collection_schema.values()):
+            prop_name = prop_name.lower()  # The actual prop name in notion-py is lowercase
+            prop_val = row[idx]
+
+            if getattr(row_block, prop_name) != prop_val:
+                setattr(row_block, prop_name, prop_val)
+
+
+def sync_markdown_blocks_to_block(markdown_blocks, block):
+    touched_blocks = set()
+    children_iter = iter(block.children)
+
+    for markdown_block in markdown_blocks:
         markdown_block_class = markdown_block["type"]
         del markdown_block["type"]
 
@@ -95,29 +149,43 @@ def sync_file_to_block(filename, block):
             block_children = markdown_block["children"]
             del markdown_block["children"]
 
-        new_block = block.children.add_new(markdown_block_class, **markdown_block)
+        try:
+            child_block = next(children_iter)
+            while not block_matches_markdown_block(child_block, markdown_block_class, **markdown_block):
+                child_block = next(children_iter)
+            logger.info(f"Using existing markdown block {child_block.id} in {block.id}")
+        except StopIteration:
+            # If we've hit the end of the children create a new child.
+            logger.info(f"Creating new markdown block {child_block.id} in {block.id}")
+            child_block = block.children.add_new(markdown_block_class, **markdown_block)
 
-        new_block.move_to(block, 'first-child')
+        touched_blocks.add(child_block.id)
 
-        if isinstance(new_block, CollectionViewBlock):
-                #We should have generated a schema and rows for this one
-                client = block._client #Hacky internals stuff...
-                new_block.collection = client.get_collection(
-                    #Low-level use of the API
-                    #TODO: Update when notion-py provides a better interface for this
-                    client.create_record("collection", parent=new_block, schema=collection_schema)
-                )
+        if isinstance(child_block, CollectionViewBlock):
+            sync_collection_rows(child_block, collection_schema, collection_rows)
 
-                new_block.views.add_new(view_type="table")
+        if block_children:
+            sync_markdown_blocks_to_block(markdown_blocks, child_block)
 
-                for row in collection_rows:
-                    newRow = new_block.collection.add_row()
-                    for idx, propName in enumerate(prop["name"] for prop in collection_schema.values()):
-                        # TODO: If rows aren't uploading, check to see if there's special
-                        # characters that don't map to propName in notion-py
-                        propName = propName.lower() #The actual prop name in notion-py is lowercase
-                        propVal = row[idx]
-                        setattr(newRow, propName, propVal)
+    for c in block.children:
+        if c.type != 'page' and c.id not in touched_blocks:
+            logger.info(f"Removing child block {c.id} from {block.id}")
+            c.remove()
+
+    logger.info(f"Rearranging sub-pages in block {block.id}")
+    move_pages_to_end(block)
+
+def sync_file_to_block(filename, block):
+    logger.info(f"Syncing {filename} to block {block.id}")
+
+    with open(filename) as markdown_fd:
+        contents = markdown_fd.read()
+
+    post = frontmatter.loads(contents)
+
+    markdown_blocks = convert(str(post))
+
+    sync_markdown_blocks_to_block(markdown_blocks, block)
 
 
 def sync_directory_to_block(directory, root_block):
@@ -157,7 +225,12 @@ def sync_directory_to_block(directory, root_block):
         if child.type == 'page' and child.id not in touched_pages:
             child.remove()
 
+
 def main():
+    import sys
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+    logger.setLevel(logging.INFO)
+
     parser = ArgumentParser()
 
     parser.add_argument('--notion-token', type=str, default=os.environ.get('NOTION_TOKEN'))
