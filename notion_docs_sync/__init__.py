@@ -126,7 +126,18 @@ def sync_file_to_block(filename, block):
 def sync_directory_to_block(directory, root_block):
     touched_pages = set()
 
+    index_path = os.path.join(directory, "index.md")
+
+    # Do the index first to ensure the correct sort order.
+    if os.path.isfile(index_path):
+        touched_pages.add(root_block.id)
+        sync_file_to_block(index_path, root_block)
+
     for path in os.listdir(directory):
+        if path == 'index.md':
+            # Skip because we had a special case for this above.
+            continue
+
         block = infer_block(root_block, path)
 
         if not block:
