@@ -277,7 +277,7 @@ class NotionRenderer(BaseRenderer):
         return self.render_multiple_to_string_and_combine(token.children, lambda s: f"`{s}`")
 
     def render_raw_text(self, token):
-        return token.content.replace("\n", " ")
+        return token.content
 
     def render_strikethrough(self, token):
         return self.render_multiple_to_string_and_combine(token.children, lambda s: f"~{s}~")
@@ -291,7 +291,7 @@ class NotionRenderer(BaseRenderer):
         return self.render_multiple_to_string_and_combine(token.children, lambda s: f"\\{s}")
 
     def render_line_break(self, token):
-        return '\n'
+        return ' '
 
     def render_image(self, token):
         #Alt text
