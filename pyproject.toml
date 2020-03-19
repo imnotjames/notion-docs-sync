@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "notion-docs-sync"
+version = "0.1.0"
+description = ""
+authors = ["James Ward <james@notjam.es>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+notion = "^0.0.25"
+python-dotenv = "^0.12.0"
+mistletoe = "^0.7.2"
+emoji = "^0.5.4"
+python-frontmatter = "^0.5.0"
+
+[tool.poetry.dev-dependencies]
+
+[tool.poetry.scripts]
+notion-docs-sync = "notion_docs_sync:main"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
+
