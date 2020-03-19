@@ -16,7 +16,7 @@ COPY poetry.lock pyproject.toml ./
 
 COPY ./notion_docs_sync/ ./notion_docs_sync/
 
-RUN if [ "$APP_ENVIRONMENT" = "production" ]; then poetry install --nodev; else poetry install; fi
+RUN if [ "$APP_ENVIRONMENT" = "production" ]; then poetry install --no-dev; else poetry install; fi
 
 ENTRYPOINT [ "notion-docs-sync"]
 CMD []
