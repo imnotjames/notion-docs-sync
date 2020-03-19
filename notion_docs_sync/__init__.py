@@ -72,9 +72,6 @@ def sync_file_to_block(filename, block):
 
     markdown_blocks = convert(str(post))
 
-    if block.icon is None:
-        block.icon = random_emoji()
-
     # TODO: Don't remove blocks that match?
     # Remove non-page blocks.
 
@@ -146,6 +143,9 @@ def sync_directory_to_block(directory, root_block):
         touched_pages.add(block.id)
 
         full_path = os.path.join(directory, path)
+
+        if block.icon is None:
+            block.icon = random_emoji()
 
         if os.path.isdir(full_path):
             sync_directory_to_block(full_path, block)
