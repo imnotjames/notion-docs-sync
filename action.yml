@@ -2,6 +2,11 @@
 
 name: 'Notion Documentation Sync'
 description: 'Synchronize Documentation from GitHub to Notion'
+
+branding:
+  icon: upload-cloud
+  color: black
+
 inputs:
   docs_path:
     description: The path to publish.
