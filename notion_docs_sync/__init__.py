@@ -210,6 +210,9 @@ def sync_file_to_block(filename, block):
 
 
 def sync_directory_to_block(directory, root_block):
+    if not root_block.get(['format', 'block_locked'], default=False):
+        root_block.set(['format', 'block_locked'], True)
+
     touched_pages = set()
 
     index_path = os.path.join(directory, "index.md")
@@ -228,6 +231,9 @@ def sync_directory_to_block(directory, root_block):
 
         if not block:
             continue
+
+        if not block.get(['format', 'block_locked'], default=False):
+            block.set(['format', 'block_locked'], True)
 
         touched_pages.add(block.id)
 
