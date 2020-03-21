@@ -1,7 +1,6 @@
 import logging
 import os
 from random import choice
-from collections import OrderedDict
 from argparse import ArgumentParser
 
 from notion.client import NotionClient
