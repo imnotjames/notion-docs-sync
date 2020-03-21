@@ -8,169 +8,206 @@ import mistletoe
 from mistletoe.base_renderer import BaseRenderer
 
 
+NOTION_CODE_LANGUAGES = [
+    "ABAP",
+    "Arduino",
+    "Bash",
+    "BASIC",
+    "C",
+    "Clojure",
+    "CoffeeScript",
+    "C++",
+    "C#",
+    "CSS",
+    "Dart",
+    "Diff",
+    "Docker",
+    "Elixir",
+    "Elm",
+    "Erlang",
+    "Flow",
+    "Fortran",
+    "F#",
+    "Gherkin",
+    "GLSL",
+    "Go",
+    "GraphQL",
+    "Groovy",
+    "Haskell",
+    "HTML",
+    "Java",
+    "JavaScript",
+    "JSON",
+    "Kotlin",
+    "LaTeX",
+    "Less",
+    "Lisp",
+    "LiveScript",
+    "Lua",
+    "Makefile",
+    "Markdown",
+    "Markup",
+    "MATLAB",
+    "Nix",
+    "Objective-C",
+    "OCaml",
+    "Pascal",
+    "Perl",
+    "PHP",
+    "Plain Text",
+    "PowerShell",
+    "Prolog",
+    "Python",
+    "R",
+    "Reason",
+    "Ruby",
+    "Rust",
+    "Sass",
+    "Scala",
+    "Scheme",
+    "Scss",
+    "Shell",
+    "SQL",
+    "Swift",
+    "TypeScript",
+    "VB.Net",
+    "Verilog",
+    "VHDL",
+    "Visual Basic",
+    "WebAssembly",
+    "XML",
+    "YAML"
+]
+NOTION_CODE_LANGUAGES_MAPPING = {
+    l.lower(): l for l in NOTION_CODE_LANGUAGES
+}
+
+
 logger = logging.getLogger(__name__)
 
+NOTION_STYLE_STRIKETHROUGH = "s"
+NOTION_STYLE_EMPHASIS = "i"
+NOTION_STYLE_STRONG = "b"
+NOTION_STYLE_CODE = "c"
+NOTION_STYLE_ANCHOR = "a"
 
-def flatten(l):
-    for el in l:
-        if isinstance(el, collections.Iterable) and not isinstance(el, (str, bytes, dict)):
-            yield from flatten(el)
-        else:
-            yield el
+
+def flatten(iterable):
+    return [item for sublist in iterable for item in sublist]
+
+
+def merge_adjacent_textblocks(blocks):
+    if not blocks:
+        return
+
+    previous = blocks.pop(0)
+
+    for block in blocks:
+        if previous["type"] == TextBlock and block["type"] == TextBlock:
+            previous["title"] += block["title"]
+            continue
+
+        yield previous
+
+        previous = block
+
+    yield previous
+
+
+def merge_adjacent_tokens(tokens):
+    if not tokens:
+        return
+
+    previous = tokens.pop(0)
+
+    for token in tokens:
+        if token[1] == previous[1]:
+            previous[0] += token[0]
+            continue
+
+        yield previous
+
+        previous = token
+
+    yield previous
+
+
+def without_notion_text(blocks):
+    return [block for block in blocks if block['type'] != TextBlock]
+
+
+def only_notion_text(blocks):
+    notion_tokens = flatten([ block['title'] or [] for block in blocks if block['type'] == TextBlock ])
+
+    # Combine similar adjacent tokens
+    return list(merge_adjacent_tokens(notion_tokens))
+
+
+def collect_notion_text(tokens, block_type, **kwargs):
+    new_block = {
+        'type': block_type,
+        'title': only_notion_text(tokens),
+        **kwargs
+    }
+
+    return [new_block, *without_notion_text(tokens)]
+
+
+def notion_as_plain_text(tokens):
+    return "".join([t[0] for t in tokens])
+
+
+def apply_style(notion_tokens, style, *style_args):
+    return [
+        [literal, existing_styles + [[style, *style_args]]]
+        for literal, existing_styles in notion_tokens
+    ]
+
+
+def as_inline_block(title):
+    return {
+        "type": TextBlock,
+        "title": title
+    }
+
+
+def as_inline_style_block(tokens, style, *style_args):
+    return as_inline_block(apply_style(only_notion_text(tokens), style, *style_args))
+
 
 class NotionRenderer(BaseRenderer):
-    """
-    A class that will render out a Markdown file into a descriptor for upload
-    with notion-py. Each object will have a .type for the block type and then
-    a bunch of different dict entries corresponding to kwargs for that block
-    type.
-    For CollectionViewBlocks, a .rows entry exists in the dictionary with a list
-    object containing a descriptor for every row. This is still TODO
-    """
+    def __render_multiple(self, tokens):
+        return flatten([self.render(t) for t in tokens])
 
     def render(self, token):
-        """
-        Takes a single Markdown token and renders it down to
-        NotionPy classes. Note that all the recursion is handled in the delegated
-        methods.
-        Overrides super().render but still uses render_map and then just
-        does special parsing for stuff
-        """
-        return self.render_map[token.__class__.__name__](token)
+        blocks = self.render_map[token.__class__.__name__](token)
 
-    def render_multiple(self, tokens):
-        """
-        Takes an array of sibling tokens and renders each one out.
-        """
-        return list(flatten(self.render(t) for t in tokens))
+        if blocks is None:
+            blocks = []
 
-    def render_multiple_to_string(self, tokens):
-        """
-        Takes tokens and render them to a single string (if possible). Anything it
-        can't convert to a string will be returned in the second part of the tuple
-        @param {objects} tokens
-        @returns {tuple} (str, dict[])
-        """
-        def toString(renderedBlock):
-            if isinstance(renderedBlock, dict) and renderedBlock['type'] == TextBlock:
-                return renderedBlock['title'] #This unwraps TextBlocks/paragraphs to use in other blocks
-            else: #Returns str as-is or returns blocks we can't convert
-                return renderedBlock
+        if isinstance(blocks, collections.Iterable) and not isinstance(blocks, (str, bytes, dict)):
+            blocks = list(blocks)
 
-        #Try to convert any objects to strings
-        rendered = [ toString(b) for b in self.render_multiple(tokens)]
-        strs = "".join([s for s in rendered if isinstance(s, str)])
-        blocks = [b for b in rendered if isinstance(b, dict)]
-        #Return a tuple of strings and any extra blocks we couldn't convert
-        return (strs, blocks)
+        if not isinstance(blocks, list):
+            blocks = [blocks]
 
-    def render_multiple_to_string_and_combine(self, tokens, toBlockFunc):
-        """
-        renderMultipleToString but combines the string with the other blocks
-        with the returned block from toBlockFunc
-        @param {objects} tokens
-        @param {function} toBlockFunc Takes a str and returns a dict for the created
-        @returns {dict[]}
-        """
-        strs, blocks = self.render_multiple_to_string(tokens)
-        ret = []
-        if strs: #If a non-empty string block
-            ret = ret + [toBlockFunc(strs)]
-        if blocks:
-            ret = ret + blocks
-        return ret
+        return blocks
 
     def render_document(self, token):
-        return self.render_multiple(token.children)
+        return self.__render_multiple(token.children)
 
     def render_block_code(self, token):
-        #Indented code and ``` ``` code fence
-        #Notion seems really picky about the language field and the case sensitivity
-        #so we match the string to the specific version that Notion.so expects
-        notionSoLangs = [
-            "ABAP",
-            "Arduino",
-            "Bash",
-            "BASIC",
-            "C",
-            "Clojure",
-            "CoffeeScript",
-            "C++",
-            "C#",
-            "CSS",
-            "Dart",
-            "Diff",
-            "Docker",
-            "Elixir",
-            "Elm",
-            "Erlang",
-            "Flow",
-            "Fortran",
-            "F#",
-            "Gherkin",
-            "GLSL",
-            "Go",
-            "GraphQL",
-            "Groovy",
-            "Haskell",
-            "HTML",
-            "Java",
-            "JavaScript",
-            "JSON",
-            "Kotlin",
-            "LaTeX",
-            "Less",
-            "Lisp",
-            "LiveScript",
-            "Lua",
-            "Makefile",
-            "Markdown",
-            "Markup",
-            "MATLAB",
-            "Nix",
-            "Objective-C",
-            "OCaml",
-            "Pascal",
-            "Perl",
-            "PHP",
-            "Plain Text",
-            "PowerShell",
-            "Prolog",
-            "Python",
-            "R",
-            "Reason",
-            "Ruby",
-            "Rust",
-            "Sass",
-            "Scala",
-            "Scheme",
-            "Scss",
-            "Shell",
-            "SQL",
-            "Swift",
-            "TypeScript",
-            "VB.Net",
-            "Verilog",
-            "VHDL",
-            "Visual Basic",
-            "WebAssembly",
-            "XML",
-            "YAML"
-        ]
-        if token.language != "":
-            matchLang = next((lang for lang in notionSoLangs if re.match(re.escape(token.language), lang, re.I)), "")
-            if not matchLang:
-                logger.info(f"Code block language {token.language} has no corresponding syntax in Notion.so")
-        else:
-            matchLang = "Plain Text"
+        match_lang = NOTION_CODE_LANGUAGES_MAPPING.get(token.language.lower(), "Plain Text")
 
-        def blockFunc(blockStr):
-            return {
-                'type': CodeBlock,
-                'language': matchLang,
-                'title_plaintext': blockStr
-            }
-        return self.render_multiple_to_string_and_combine(token.children, blockFunc)
+        children = self.__render_multiple(token.children)
+
+        code_block = {
+            "type": CodeBlock,
+            "language": match_lang,
+            "title_plaintext": notion_as_plain_text(only_notion_text(children))
+        }
+
+        return [code_block, *without_notion_text(children)]
 
     def render_thematic_break(self, token):
         return {
@@ -180,110 +217,86 @@ class NotionRenderer(BaseRenderer):
     def render_heading(self, token):
         level = token.level
         if level > 3:
-            logger.info(f"h{level} not supported in Notion.so, converting to h3")
+            logger.debug(f"h{level} not supported in notion.so, converting to h3")
             level = 3
 
-        def blockFunc(blockStr):
-            return {
-                'type': [HeaderBlock, SubheaderBlock, SubsubheaderBlock][level-1],
-                'title': blockStr
-            }
-        return self.render_multiple_to_string_and_combine(token.children, blockFunc)
+        block_type = [HeaderBlock, SubheaderBlock, SubsubheaderBlock][level - 1]
+
+        return collect_notion_text(self.__render_multiple(token.children), block_type)
 
     def render_quote(self, token):
-        def blockFunc(blockStr):
-            return {
-                'type': QuoteBlock,
-                'title': blockStr
-            }
-        return self.render_multiple_to_string_and_combine(token.children, blockFunc)
+        return collect_notion_text(self.__render_multiple(token.children), QuoteBlock)
 
     def render_paragraph(self, token):
-        def blockFunc(blockStr):
-            return {
-                'type': TextBlock,
-                'title': blockStr
-            }
-        return self.render_multiple_to_string_and_combine(token.children, blockFunc)
+        # Collapse adjacent text blocks
+        return list(merge_adjacent_textblocks(self.__render_multiple(token.children)))
 
     def render_list(self, token):
-        #List items themselves are each blocks, so skip it and directly render
-        #the children
-        return self.render_multiple(token.children)
+        return self.__render_multiple(token.children)
 
     def render_list_item(self, token):
-        leaderContainsNumber = re.match(r'\d', token.leader) #Contains a number
+        leaderContainsNumber = re.match(r'\d', token.leader)  # Contains a number
 
-        #Lists can have "children" (nested lists, nested images...), so we need
-        #to render out all the nodes and sort through them to find the string
-        #for this item and any children
-        rendered = self.render_multiple(token.children)
-        children = [b for b in rendered if b['type'] != TextBlock]
-        strings = [s['title'] for s in rendered if s['type'] == TextBlock]
+        children = self.__render_multiple(token.children)
 
         return {
             'type': NumberedListBlock if leaderContainsNumber else BulletedListBlock,
-            'title': "".join(strings),
-            'children': children
+            'title': only_notion_text(children),
+            'children': without_notion_text(children),
         }
 
     def render_table(self, token):
-        header_row = self.render(token.header)
-        rows = [self.render(r) for r in token.children]
-
-        schema = []
-
-        for row in header_row:
-            schema.append({"name": row, "type": "text"})
+        header_row = [notion_as_plain_text(h["title"]) for h in self.render(token.header)]
+        rows = [
+            [
+                notion_as_plain_text(c["title"])
+                for c in self.render(r)
+            ]
+            for r in token.children
+        ]
 
         return {
             'type': CollectionViewBlock,
             'rows': rows,
-            'schema': schema
+            'schema': [{"name": h, "type": "text"} for h in header_row]
         }
 
     def render_table_row(self, token):
-        #Rows are a concept in Notion (`CollectionRowBlock`) but notion-py provides
-        #another API to use it, `.add_row()` so we just render down to an array
-        #and handle in the Table block.
-        return self.render_multiple(token.children)
+        return self.__render_multiple(token.children)
 
     def render_table_cell(self, token):
-        # Render straight down to a string, cells aren't a concept in Notion
-        strs, blocks = self.render_multiple_to_string(token.children)
-        if blocks:
-            logger.info("Table cell contained non-strings (maybe an image?) and could not add...")
-        return strs
+        return as_inline_block(only_notion_text(self.__render_multiple(token.children)))
 
     def render_strong(self, token):
-        return self.render_multiple_to_string_and_combine(token.children, lambda s: f"**{s}**")
+        return as_inline_style_block(self.__render_multiple(token.children), NOTION_STYLE_STRONG)
 
     def render_emphasis(self, token):
-        return self.render_multiple_to_string_and_combine(token.children, lambda s: f"*{s}*")
+        return as_inline_style_block(self.__render_multiple(token.children), NOTION_STYLE_EMPHASIS)
 
     def render_inline_code(self, token):
-        return self.render_multiple_to_string_and_combine(token.children, lambda s: f"`{s}`")
+        return as_inline_style_block(self.__render_multiple(token.children), NOTION_STYLE_CODE)
 
     def render_raw_text(self, token):
-        return token.content
+        return as_inline_block([[token.content, []]])
 
     def render_strikethrough(self, token):
-        return self.render_multiple_to_string_and_combine(token.children, lambda s: f"~{s}~")
+        return as_inline_style_block(self.__render_multiple(token.children), NOTION_STYLE_STRIKETHROUGH)
 
     def render_link(self, token):
-        strs, blocks = self.render_multiple_to_string(token.children)
-        return [ f"[{strs}]({token.target})" ] + blocks
+        return as_inline_style_block(self.__render_multiple(token.children), NOTION_STYLE_ANCHOR, token.target)
 
     def render_escape_sequence(self, token):
-        #Pretty sure this is just like \xxx type escape sequences?
-        return self.render_multiple_to_string_and_combine(token.children, lambda s: f"\\{s}")
+        return self.__render_multiple(token.children)
 
     def render_line_break(self, token):
-        return ' '
+        return as_inline_block([[' ', []]])
 
     def render_image(self, token):
-        #Alt text
-        alt = token.title or self.render_multiple_to_string(token.children)[0]
+        if token.title:
+            alt = [[ token.title, [] ]]
+        else:
+            alt = notion_as_plain_text(only_notion_text(self.__render_multiple(token.children)))
+
         return {
             'type': ImageBlock,
             'display_source': token.src,

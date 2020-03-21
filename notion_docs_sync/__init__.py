@@ -159,16 +159,10 @@ def sync_markdown_blocks_to_block(markdown_blocks, block):
         markdown_block_class = markdown_block["type"]
         del markdown_block["type"]
 
-        if "schema" in markdown_block:
-            collection_schema = markdown_block["schema"]
-            collection_rows = markdown_block["rows"]
-            del markdown_block["schema"]
-            del markdown_block["rows"]
-
-        block_children = None
-        if "children" in markdown_block:
-            block_children = markdown_block["children"]
-            del markdown_block["children"]
+        markdown_contents = markdown_block.pop("title", None)
+        collection_schema = markdown_block.pop("schema", None)
+        collection_rows = markdown_block.pop("rows", None)
+        block_children = markdown_block.pop("children", None)
 
         try:
             child_block = next(children_iter)
@@ -179,6 +173,12 @@ def sync_markdown_blocks_to_block(markdown_blocks, block):
             # If we've hit the end of the children create a new child.
             child_block = block.children.add_new(markdown_block_class, **markdown_block)
             logger.info(f"Creating new markdown block {child_block.id} in {block.id}")
+
+        if markdown_contents:
+            # Manually set the title property to bypass the `markdown_to_notion` in `notion-py`
+            # This is because it chokes up on URLs and really we just don't need this 'cause
+            # we're parsing the markdown ourselves.
+            child_block.set(["properties", "title"], markdown_contents)
 
         touched_blocks.add(child_block.id)
 
