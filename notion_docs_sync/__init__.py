@@ -177,7 +177,8 @@ def sync_markdown_blocks_to_block(markdown_blocks, block):
             # Manually set the title property to bypass the `markdown_to_notion` in `notion-py`
             # This is because it chokes up on URLs and really we just don't need this 'cause
             # we're parsing the markdown ourselves.
-            child_block.set(["properties", "title"], markdown_contents)
+            if child_block.get(["properties", "title"]) != markdown_contents:
+                child_block.set(["properties", "title"], markdown_contents)
 
         touched_blocks.add(child_block.id)
 
