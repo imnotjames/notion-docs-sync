@@ -79,7 +79,7 @@ NOTION_CODE_LANGUAGES = [
     "YAML"
 ]
 NOTION_CODE_LANGUAGES_MAPPING = {
-    l.lower(): l for l in NOTION_CODE_LANGUAGES
+    lang.lower(): lang for lang in NOTION_CODE_LANGUAGES
 }
 
 
@@ -235,12 +235,13 @@ class NotionRenderer(BaseRenderer):
         return self.__render_multiple(token.children)
 
     def render_list_item(self, token):
-        leaderContainsNumber = re.match(r'\d', token.leader)  # Contains a number
+        leader_contains_number = re.match(r'\d', token.leader)
+        block_type = NumberedListBlock if leader_contains_number else BulletedListBlock
 
         children = self.__render_multiple(token.children)
 
         return {
-            'type': NumberedListBlock if leaderContainsNumber else BulletedListBlock,
+            'type': block_type,
             'title': only_notion_text(children),
             'children': without_notion_text(children),
         }
