@@ -193,8 +193,6 @@ def sync_markdown_blocks_to_block(markdown_blocks, block):
             logger.info(f"Removing child block {c.id} from {block.id}")
             c.remove()
 
-    logger.info(f"Rearranging sub-pages in block {block.id}")
-    move_pages_to_end(block)
 
 def sync_file_to_block(filename, block):
     logger.info(f"Syncing {filename} to block {block.id}")
@@ -248,7 +246,10 @@ def sync_directory_to_block(directory, root_block):
             sync_file_to_block(full_path, block)
 
     # Any children that are pages under root_block but aren't in touched_pages should be pruned
+    # And the pages linked within them should be moved to the tail.
+    move_pages_to_end(root_block)
     for child in root_block.children:
+        move_pages_to_end(child)
         if child.type == 'page' and child.id not in touched_pages:
             child.remove()
 
