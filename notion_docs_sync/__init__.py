@@ -221,6 +221,10 @@ def sync_directory_to_block(directory, root_block):
         sync_file_to_block(index_path, root_block)
 
     for path in os.listdir(directory):
+        if path.startswith('.'):
+            # Skip any "private" files / directories
+            continue
+
         if path == 'index.md':
             # Skip because we had a special case for this above.
             continue
