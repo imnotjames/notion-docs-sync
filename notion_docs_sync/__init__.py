@@ -2,6 +2,7 @@ import logging
 import os
 from random import choice
 from argparse import ArgumentParser
+from urllib.parse import urlparse
 
 from notion.client import NotionClient
 from notion.block import Block, PageBlock, CollectionViewBlock
@@ -194,7 +195,7 @@ def sync_markdown_blocks_to_block(markdown_blocks, block):
             c.remove()
 
 
-def sync_file_to_block(filename, block):
+def sync_file_to_block(filename, block, links : dict={}):
     logger.info(f"Syncing {filename} to block {block.id}")
 
     with open(filename) as markdown_fd:
@@ -202,27 +203,42 @@ def sync_file_to_block(filename, block):
 
     post = frontmatter.loads(contents)
 
-    markdown_blocks = convert(str(post))
+    def resolve_link(target):
+        try:
+            parsed = urlparse(target)
+
+            if parsed.scheme:
+                return target
+        except:
+            pass
+
+        target_path = os.path.realpath(os.path.join(os.path.dirname(filename), target))
+
+        block = links.get(target_path)
+
+        if not block:
+            return target
+
+        return block.get_browseable_url()
+
+    markdown_blocks = convert(str(post), link_resolver=resolve_link)
 
     sync_markdown_blocks_to_block(markdown_blocks, block)
 
 
-def sync_directory_to_block(directory, root_block):
-    if not root_block.get(['format', 'block_locked'], default=False):
-        root_block.set(['format', 'block_locked'], True)
-
+def create_page_structure(directory, root_block):
     touched_pages = set()
 
-    index_path = os.path.join(directory, "index.md")
-    readme_path = os.path.join(directory, "README.md")
+    files_to_pages = dict()
+
+    index_path = os.path.realpath(os.path.join(directory, "index.md"))
+    readme_path = os.path.realpath(os.path.join(directory, "README.md"))
 
     # Do the index/readme first to ensure the correct sort order.
     if os.path.isfile(index_path):
-        touched_pages.add(root_block.id)
-        sync_file_to_block(index_path, root_block)
+        files_to_pages[index_path] = root_block
     elif os.path.isfile(readme_path):
-        touched_pages.add(root_block.id)
-        sync_file_to_block(readme_path, root_block)
+        files_to_pages[readme_path] = root_block
 
     for path in os.listdir(directory):
         if path.startswith('.'):
@@ -238,29 +254,48 @@ def sync_directory_to_block(directory, root_block):
         if not block:
             continue
 
-        if not block.get(['format', 'block_locked'], default=False):
-            block.set(['format', 'block_locked'], True)
+        full_path = os.path.realpath(os.path.join(directory, path))
 
         touched_pages.add(block.id)
 
-        full_path = os.path.join(directory, path)
+        if os.path.isdir(full_path):
+            files_to_pages.update(create_page_structure(full_path, block))
+        else:
+            files_to_pages[full_path] = block
+
+    return files_to_pages
+
+
+def sync_directory_to_block(directory, root_block):
+    # Do Two Passes: First, create blocks for all files that need them
+    # Keep track of absolute file path -> block
+    logger.info("Creating page structure..")
+    files_to_pages = create_page_structure(os.path.realpath(directory), root_block)
+
+    touched_pages = set(block.id for block in files_to_pages.values())
+
+    # Then, for iterate through every single page block created and:
+    for full_path, block in files_to_pages.items():
+        #   Lock it
+        if not block.get(['format', 'block_locked'], default=False):
+            block.set(['format', 'block_locked'], True)
 
         if block.icon is None:
             block.icon = random_emoji()
 
-        if os.path.isdir(full_path):
-            sync_directory_to_block(full_path, block)
-        else:
-            sync_file_to_block(full_path, block)
+        #   Sync it.
+        sync_file_to_block(full_path, block, links=files_to_pages)
 
-    # Any children that are pages under root_block but aren't in touched_pages should be pruned
-    # And the pages linked within them should be moved to the tail.
-    move_pages_to_end(root_block)
-    for child in root_block.children:
-        move_pages_to_end(child)
-        if child.type == 'page' and child.id not in touched_pages:
-            child.remove()
+        #   Sort it.
+        move_pages_to_end(block)
 
+        #   Clean it.
+        for child in block.children:
+            # Any children that are pages under block but aren't in touched_pages should be pruned
+            if child.type == 'page' and child.id not in touched_pages:
+                child.remove()
+
+    #   Technologic.
 
 def main():
     import sys

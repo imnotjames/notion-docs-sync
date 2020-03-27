@@ -4,7 +4,7 @@ import collections
 from notion.block import CodeBlock, DividerBlock, HeaderBlock, SubheaderBlock, \
     SubsubheaderBlock, QuoteBlock, TextBlock, NumberedListBlock, \
     BulletedListBlock, ImageBlock, CollectionViewBlock
-import mistletoe
+from mistletoe.block_token import Document
 from mistletoe.base_renderer import BaseRenderer
 
 
@@ -176,6 +176,10 @@ def as_inline_style_block(tokens, style, *style_args):
 
 
 class NotionRenderer(BaseRenderer):
+    def __init__(self, link_resolver=(lambda path: path), *extras):
+        super().__init__(*extras)
+        self.__link_resolver = link_resolver
+
     def __render_multiple(self, tokens):
         return flatten([self.render(t) for t in tokens])
 
@@ -284,7 +288,11 @@ class NotionRenderer(BaseRenderer):
         return as_inline_style_block(self.__render_multiple(token.children), NOTION_STYLE_STRIKETHROUGH)
 
     def render_link(self, token):
-        return as_inline_style_block(self.__render_multiple(token.children), NOTION_STYLE_ANCHOR, token.target)
+        return as_inline_style_block(
+            self.__render_multiple(token.children),
+            NOTION_STYLE_ANCHOR,
+            self.__link_resolver(token.target)
+        )
 
     def render_escape_sequence(self, token):
         return self.__render_multiple(token.children)
@@ -306,5 +314,6 @@ class NotionRenderer(BaseRenderer):
         }
 
 
-def convert(markdown):
-    return mistletoe.markdown(markdown, renderer=NotionRenderer)
+def convert(markdown, link_resolver=(lambda path: path)):
+    with NotionRenderer(link_resolver=link_resolver) as renderer:
+        return renderer.render(Document(markdown))
