@@ -214,18 +214,22 @@ def sync_directory_to_block(directory, root_block):
     touched_pages = set()
 
     index_path = os.path.join(directory, "index.md")
+    readme_path = os.path.join(directory, "README.md")
 
-    # Do the index first to ensure the correct sort order.
+    # Do the index/readme first to ensure the correct sort order.
     if os.path.isfile(index_path):
         touched_pages.add(root_block.id)
         sync_file_to_block(index_path, root_block)
+    elif os.path.isfile(readme_path):
+        touched_pages.add(root_block.id)
+        sync_file_to_block(readme_path, root_block)
 
     for path in os.listdir(directory):
         if path.startswith('.'):
             # Skip any "private" files / directories
             continue
 
-        if path == 'index.md':
+        if path == 'index.md' or path == 'README.md':
             # Skip because we had a special case for this above.
             continue
 
