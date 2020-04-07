@@ -260,7 +260,7 @@ def create_page_structure(directory, root_block):
 
         if os.path.isdir(full_path):
             files_to_pages.update(create_page_structure(full_path, block))
-        else:
+        elif os.path.splitext(full_path)[1].lower() == '.md':
             files_to_pages[full_path] = block
 
     return files_to_pages
