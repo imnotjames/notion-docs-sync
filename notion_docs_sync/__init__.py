@@ -188,6 +188,12 @@ def sync_markdown_blocks_to_block(markdown_blocks, block):
 
         if block_children:
             sync_markdown_blocks_to_block(block_children, child_block)
+        elif len(child_block.get(child_block.child_list_key, [])) > 0:
+            # If no children should exist but there are children attached to this block
+            # (a list, etc) we should remove them as they're no longer needed!
+            for c in child_block.children:
+                c.remove()
+
 
     for c in block.children:
         if c.type != 'page' and c.id not in touched_blocks:
