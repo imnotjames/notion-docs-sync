@@ -233,19 +233,22 @@ def create_page_structure(directory, root_block):
 
     index_path = os.path.realpath(os.path.join(directory, "index.md"))
     readme_path = os.path.realpath(os.path.join(directory, "README.md"))
+    readme_lower_path = os.path.realpath(os.path.join(directory, "README.md"))
 
     # Do the index/readme first to ensure the correct sort order.
     if os.path.isfile(index_path):
         files_to_pages[index_path] = root_block
     elif os.path.isfile(readme_path):
         files_to_pages[readme_path] = root_block
+    elif os.path.isfile(readme_lower_path):
+        files_to_pages[readme_lower_path] = root_block
 
     for path in os.listdir(directory):
         if path.startswith('.'):
             # Skip any "private" files / directories
             continue
 
-        if path == 'index.md' or path == 'README.md':
+        if path.lower() == 'index.md' or path.lower() == 'readme.md':
             # Skip because we had a special case for this above.
             continue
 
