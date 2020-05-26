@@ -174,7 +174,7 @@ def sync_markdown_blocks_to_block(markdown_blocks, block):
             child_block = block.children.add_new(markdown_block_class, **markdown_block)
             logger.info(f"Creating new markdown block {child_block.id} in {block.id}")
 
-        if markdown_contents:
+        if markdown_contents is not None:
             # Manually set the title property to bypass the `markdown_to_notion` in `notion-py`
             # This is because it chokes up on URLs and really we just don't need this 'cause
             # we're parsing the markdown ourselves.
