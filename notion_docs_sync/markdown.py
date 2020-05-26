@@ -244,10 +244,17 @@ class NotionRenderer(BaseRenderer):
 
         children = self.__render_multiple(token.children)
 
+        title = []
+
+        if len(children) > 0:
+            if children[0]['type'] == TextBlock:
+                title = only_notion_text(children[0:1])
+                children = children[1:]
+
         return {
             'type': block_type,
-            'title': only_notion_text(children),
-            'children': without_notion_text(children),
+            'title': title,
+            'children': children
         }
 
     def render_table(self, token):
